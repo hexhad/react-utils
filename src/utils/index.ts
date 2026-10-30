@@ -1,5 +1,9 @@
-export { ProviderTreeCreator } from './ProviderTreeCreator';
-export type { ComposedProvider, ProviderEntry } from './ProviderTreeCreator';
+export { ProviderTree, ProviderTreeCreator } from './ProviderTreeCreator';
+export type {
+  ComposedProvider,
+  ProviderEntry,
+  ProviderTreeProps,
+} from './ProviderTreeCreator';
 
 export { createModalManager } from './GlobalModalManager';
 export type {

@@ -15,15 +15,38 @@ export type ComposedProvider = React.ComponentType<
   React.PropsWithChildren<object>
 >;
 
-// Stable innermost node — defined at module level so it is never recreated.
-const FragmentWrapper: React.FC<React.PropsWithChildren<object>> = ({
-  children,
-}) => React.createElement(React.Fragment, null, children);
+export interface ProviderTreeProps {
+  providers: readonly ProviderEntry[];
+  children?: React.ReactNode;
+}
+
+const getName = (component: React.ComponentType<any>): string =>
+  component.displayName ?? component.name ?? 'Unknown';
+
+/**
+ * Nests `children` inside every provider, outermost-first, without adding any
+ * intermediate wrapper components to the tree.
+ */
+function nestProviders(
+  providers: readonly ProviderEntry[],
+  children: React.ReactNode
+): React.ReactNode {
+  let node = children;
+  for (let i = providers.length - 1; i >= 0; i--) {
+    const entry = providers[i]!;
+    node = React.createElement(
+      entry[0] as React.ComponentType<React.PropsWithChildren<AnyProps>>,
+      entry[1],
+      node
+    );
+  }
+  return node;
+}
 
 // WeakMap cache — when the same providers array reference is passed on every
 // call (i.e. declared at module level), the composed tree is returned from
 // cache with zero re-computation.
-const composedCache = new WeakMap<object[], ComposedProvider>();
+const composedCache = new WeakMap<object, ComposedProvider>();
 
 /**
  * Composes multiple React (or React Native) context providers into a single
@@ -31,6 +54,13 @@ const composedCache = new WeakMap<object[], ComposedProvider>();
  *
  * Providers are applied outermost-first (left to right = top to bottom in the tree).
  * Declare the providers array outside your component to benefit from WeakMap caching.
+ *
+ * The result is a single component, so N providers add N + 1 nodes to the
+ * tree rather than one wrapper per provider.
+ *
+ * Every call with a new array returns a new component type, which remounts
+ * everything below it. When the providers are built inside a component
+ * (e.g. with `useMemo`), prefer `<ProviderTree providers={...}>`.
  *
  * @example
  * const providers: ProviderEntry[] = [
@@ -55,33 +85,34 @@ export function ProviderTreeCreator(
   const cached = composedCache.get(providers);
   if (cached) return cached;
 
-  const composed = providers.reduceRight<ComposedProvider>(
-    (InnerComponent, entry) => {
-      const ProviderComponent = entry[0] as React.ComponentType<
-        React.PropsWithChildren<AnyProps>
-      >;
-      const props: AnyProps = entry[1] ?? {};
+  // Snapshot so later mutation of the caller's array cannot change the tree.
+  const snapshot = providers.slice();
 
-      function ProviderWrapper({ children }: React.PropsWithChildren<object>) {
-        return React.createElement(
-          ProviderComponent,
-          props,
-          React.createElement(InnerComponent, null, children)
-        );
-      }
+  function ComposedProviders({ children }: React.PropsWithChildren<object>) {
+    return nestProviders(snapshot, children) as React.ReactElement;
+  }
 
-      ProviderWrapper.displayName = `ProviderTreeCreator(${
-        ProviderComponent.displayName ?? ProviderComponent.name ?? 'Unknown'
-      })`;
+  ComposedProviders.displayName = `ProviderTreeCreator(${snapshot
+    .map((entry) => getName(entry[0]))
+    .join(', ')})`;
 
-      return ProviderWrapper;
-    },
-    FragmentWrapper
-  );
+  composedCache.set(providers, ComposedProviders);
 
-  composedCache.set(providers, composed);
+  return ComposedProviders;
+}
 
-  return composed;
+/**
+ * Component form of `ProviderTreeCreator`. Safe to use with providers built
+ * during render: changing the `providers` array (or a provider's props)
+ * re-renders the providers in place instead of remounting the subtree.
+ *
+ * @example
+ * <ProviderTree providers={[[Provider, { store }], [SafeAreaProvider]]}>
+ *   <App />
+ * </ProviderTree>
+ */
+export function ProviderTree({ providers, children }: ProviderTreeProps) {
+  return nestProviders(providers, children) as React.ReactElement;
 }
 
 export default ProviderTreeCreator;

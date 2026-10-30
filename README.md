@@ -79,14 +79,23 @@ Providers are applied **outermost-first** — left to right in the array maps to
 
 ### Performance
 
-- The innermost `FragmentWrapper` is defined at module level and never recreated.
-- Each intermediate wrapper is a named function so React DevTools shows `ProviderTreeCreator(ThemeProvider)` instead of anonymous arrows.
+- The composed result is a single component that nests the providers directly, so N providers add N + 1 nodes to the tree (no wrapper component per provider). React DevTools shows it as `ProviderTreeCreator(ThemeProvider, AuthProvider, …)`.
 - When you declare the providers array outside your component, `ProviderTreeCreator` returns the cached result on repeat calls via a `WeakMap` — zero re-computation.
+- Every new array produces a new component type, which remounts everything below it. If you build the providers inside a component (e.g. with `useMemo` depending on callbacks), use `<ProviderTree>` instead — it updates the providers in place:
+
+```tsx
+import { ProviderTree } from '@hexhad/react-utils';
+
+<ProviderTree providers={providers}>
+  <App />
+</ProviderTree>;
+```
 
 ### API
 
 ```ts
 ProviderTreeCreator(providers: ProviderEntry[]): ComposedProvider
+ProviderTree(props: { providers: readonly ProviderEntry[]; children?: ReactNode })
 ```
 
 ```ts
@@ -107,9 +116,10 @@ A zero-dependency, typed modal manager for React Native (and React DOM). It mana
 
 ### Behaviour
 
-- Calling `show` closes all other open modals first by default (`closeOthers: true`).
-- If the target modal is already open, `show` updates its props and notifies listeners without calling `present()` again.
+- Calling `show` closes all open modals first by default (`closeOthers: true`) — including the target itself, so an already-open modal is dismissed and presented again. This keeps `show` working even if the modal was dismissed without the manager knowing.
+- With `closeOthers: false`, if the target modal is already open, `show` updates its props and notifies listeners without calling `present()` again.
 - `hide` calls `dismiss()` on the modal ref, clears its props, and notifies listeners.
+- Listeners receive a frozen copy of the props; no copy is made when a modal has no listeners.
 - `toggle` calls `hide` if the modal is open, otherwise `show`.
 - `updateState` is for syncing external dismissal (e.g. a swipe-down gesture) back into the manager without calling `dismiss()` again.
 - Every listener removal returns an unsubscribe function — no need to call `removeAllListeners` manually.

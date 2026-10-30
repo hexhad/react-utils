@@ -356,6 +356,16 @@ GlobalModalManager._debugConfigs();
 
 ---
 
+## Agent skill
+
+[`skills/react-utils/SKILL.md`](skills/react-utils/SKILL.md) teaches coding agents (Claude Code and others that read `SKILL.md`) how to use this library correctly. To install it for Claude Code, copy the folder into `~/.claude/skills/` (all projects) or `.claude/skills/` (one project):
+
+```sh
+cp -R skills/react-utils ~/.claude/skills/
+```
+
+---
+
 ## Extending the library
 
 The library is structured so new utilities drop in without touching existing code.
